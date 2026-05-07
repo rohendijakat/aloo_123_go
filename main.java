@@ -94,3 +94,51 @@ public final class Aloo123Go {
     // -------------------------------- API --------------------------------
     interface Handler { void handle(HttpExchange ex) throws Exception; }
 
+    static final class Api implements Closeable {
+        private final Cli cli;
+        private final Store store;
+        private final Engine engine;
+        private final LogBus logs;
+        private final HttpServer server;
+        private final ExecutorService pool;
+        private final ScheduledExecutorService scheduler;
+
+        Api(Cli cli, Store store, Engine engine, LogBus logs) throws IOException {
+            this.cli = cli;
+            this.store = store;
+            this.engine = engine;
+            this.logs = logs;
+            this.server = HttpServer.create(new InetSocketAddress(cli.bind, cli.port), 0);
+            this.pool = Executors.newFixedThreadPool(Math.max(4, Runtime.getRuntime().availableProcessors()));
+            this.scheduler = Executors.newSingleThreadScheduledExecutor();
+            server.setExecutor(pool);
+            routes();
+        }
+
+        void start() {
+            scheduler.scheduleAtFixedRate(() -> {
+                try { store.flushIfDirty(); }
+                catch (Exception e) { logs.error("persist", "flush failed: " + e.getMessage()); }
+            }, 2, 2, TimeUnit.SECONDS);
+            server.start();
+        }
+
+        @Override public void close() {
+            try { scheduler.shutdownNow(); } catch (Exception ignored) {}
+            try { pool.shutdownNow(); } catch (Exception ignored) {}
+            try { server.stop(0); } catch (Exception ignored) {}
+        }
+
+        private void routes() {
+            add("/api/status", ex -> respondJson(ex, 200,
+                    new Json.Obj()
+                            .put("ok", true)
+                            .put("name", "aloo_123_go")
+                            .put("ts", System.currentTimeMillis())
+                            .put("dataDir", cli.dataDir.toAbsolutePath().toString())
+            ));
+
+            add("/api/strategies", ex -> {
+                if (method(ex, "GET")) {
+                    Json.Arr arr = new Json.Arr();
+                    for (StrategyDef s : store.listStrategies()) arr.add(s.toJson());
