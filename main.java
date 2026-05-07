@@ -478,3 +478,51 @@ public final class Aloo123Go {
             this.symbol = symbol;
             this.candlesCsv = candlesCsv;
             this.maxBytes = maxBytes;
+            this.startCash = startCash;
+            this.minTradeCash = minTradeCash;
+        }
+
+        static BacktestRequest fromJson(Json.Obj o) {
+            String sid = o.getString("strategyId", null);
+            if (sid == null || sid.isBlank()) throw ApiError.bad(400, "missing_strategyId");
+            String sym = o.getString("symbol", "ETHUSD");
+            String csv = o.getString("candlesCsv", "");
+            if (csv.isBlank()) throw ApiError.bad(400, "missing_candlesCsv");
+            int max = o.getInt("maxBytes", 5_000_000);
+            double cash = o.getDouble("startCash", 10_000);
+            double minTrade = o.getDouble("minTradeCash", 25);
+            return new BacktestRequest(sid, sym, csv, max, cash, minTrade);
+        }
+    }
+
+    static final class BacktestResult {
+        final String strategyId;
+        final String strategyName;
+        final String symbol;
+        final double startCash;
+        final double endCash;
+        final double endEquity;
+        final long trades;
+        final double winRate;
+        final double maxDrawdown;
+        final List<Fill> fills;
+        final EquityCurve curve;
+        final List<String> warnings;
+
+        BacktestResult(String strategyId, String strategyName, String symbol, double startCash, double endCash, double endEquity,
+                       long trades, double winRate, double maxDrawdown, List<Fill> fills, EquityCurve curve, List<String> warnings) {
+            this.strategyId = strategyId;
+            this.strategyName = strategyName;
+            this.symbol = symbol;
+            this.startCash = startCash;
+            this.endCash = endCash;
+            this.endEquity = endEquity;
+            this.trades = trades;
+            this.winRate = winRate;
+            this.maxDrawdown = maxDrawdown;
+            this.fills = fills;
+            this.curve = curve;
+            this.warnings = warnings;
+        }
+
+        static BacktestResult of(BacktestRequest req, StrategyDef strat, PaperState st, List<Fill> fills, EquityCurve curve, List<String> warnings) {
