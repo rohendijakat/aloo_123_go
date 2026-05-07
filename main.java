@@ -334,3 +334,51 @@ public final class Aloo123Go {
     static final class Rules {
         final int emaFast;
         final int emaSlow;
+        final int rsiLen;
+        final double rsiBuyBelow;
+        final double rsiSellAbove;
+        final double riskPerTrade;
+        final int slippageBps;
+        final int cooldownBars;
+        final double takeProfitPct;
+        final double stopLossPct;
+
+        Rules(int emaFast, int emaSlow, int rsiLen, double rsiBuyBelow, double rsiSellAbove,
+              double riskPerTrade, int slippageBps, int cooldownBars, double takeProfitPct, double stopLossPct) {
+            this.emaFast = emaFast;
+            this.emaSlow = emaSlow;
+            this.rsiLen = rsiLen;
+            this.rsiBuyBelow = rsiBuyBelow;
+            this.rsiSellAbove = rsiSellAbove;
+            this.riskPerTrade = riskPerTrade;
+            this.slippageBps = slippageBps;
+            this.cooldownBars = cooldownBars;
+            this.takeProfitPct = takeProfitPct;
+            this.stopLossPct = stopLossPct;
+        }
+
+        static Rules defaults() {
+            return new Rules(12, 26, 14, 38.0, 66.0, 0.20, 35, 3, 0.032, 0.017);
+        }
+
+        Decision decide(IndicatorSet ind) {
+            boolean trendUp = ind.emaFast > ind.emaSlow;
+            boolean trendDown = ind.emaFast < ind.emaSlow;
+            boolean oversold = ind.rsi <= rsiBuyBelow;
+            boolean overbought = ind.rsi >= rsiSellAbove;
+            if (trendUp && oversold) return new Decision(Action.BUY, "trendUp+oversold");
+            if (trendDown && overbought) return new Decision(Action.SELL, "trendDown+overbought");
+            return new Decision(Action.HOLD, "no_edge");
+        }
+
+        Json.Obj toJson() {
+            return new Json.Obj()
+                    .put("emaFast", emaFast)
+                    .put("emaSlow", emaSlow)
+                    .put("rsiLen", rsiLen)
+                    .put("rsiBuyBelow", rsiBuyBelow)
+                    .put("rsiSellAbove", rsiSellAbove)
+                    .put("riskPerTrade", riskPerTrade)
+                    .put("slippageBps", slippageBps)
+                    .put("cooldownBars", cooldownBars)
+                    .put("takeProfitPct", takeProfitPct)
