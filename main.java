@@ -286,3 +286,51 @@ public final class Aloo123Go {
     // -------------------------- Strategy --------------------------
     static final class StrategyDef {
         final String id;
+        final String name;
+        final String symbol;
+        final Rules rules;
+        final long createdAt;
+        final long updatedAt;
+
+        StrategyDef(String id, String name, String symbol, Rules rules, long createdAt, long updatedAt) {
+            this.id = id; this.name = name; this.symbol = symbol; this.rules = rules; this.createdAt = createdAt; this.updatedAt = updatedAt;
+        }
+
+        static StrategyDef defaults() {
+            long now = System.currentTimeMillis();
+            return new StrategyDef(
+                    "s_" + UUID.randomUUID().toString().replace("-", "").substring(0, 12),
+                    "Pulse EMA-RSI",
+                    "ETHUSD",
+                    Rules.defaults(),
+                    now,
+                    now
+            );
+        }
+
+        Json.Obj toJson() {
+            return new Json.Obj()
+                    .put("id", id)
+                    .put("name", name)
+                    .put("symbol", symbol)
+                    .put("rules", rules.toJson())
+                    .put("createdAt", createdAt)
+                    .put("updatedAt", updatedAt);
+        }
+
+        static StrategyDef fromJson(Json.Obj o, StrategyDef fb) {
+            if (o == null) return fb;
+            long now = System.currentTimeMillis();
+            String id = o.getString("id", fb == null ? null : fb.id);
+            String name = o.getString("name", fb == null ? "Strategy" : fb.name);
+            String symbol = o.getString("symbol", fb == null ? "ETHUSD" : fb.symbol);
+            Rules rules = Rules.fromJson(o.getObj("rules"), fb == null ? Rules.defaults() : fb.rules);
+            long createdAt = o.getLong("createdAt", fb == null ? now : fb.createdAt);
+            if (id == null || id.isBlank()) id = "s_" + UUID.randomUUID().toString().replace("-", "").substring(0, 12);
+            return new StrategyDef(id, name, symbol, rules, createdAt, now);
+        }
+    }
+
+    static final class Rules {
+        final int emaFast;
+        final int emaSlow;
