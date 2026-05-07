@@ -142,3 +142,51 @@ public final class Aloo123Go {
                 if (method(ex, "GET")) {
                     Json.Arr arr = new Json.Arr();
                     for (StrategyDef s : store.listStrategies()) arr.add(s.toJson());
+                    respondJson(ex, 200, new Json.Obj().put("ok", true).put("strategies", arr));
+                } else if (method(ex, "POST")) {
+                    Json.Obj body = readJsonObj(ex);
+                    StrategyDef s = StrategyDef.fromJson(body, StrategyDef.defaults());
+                    store.upsertStrategy(s);
+                    logs.info("strategy", "upsert " + s.id + " (" + s.name + ")");
+                    respondJson(ex, 200, new Json.Obj().put("ok", true).put("strategy", s.toJson()));
+                } else if (method(ex, "DELETE")) {
+                    String id = q(ex.getRequestURI(), "id").orElse(null);
+                    if (id == null) throw ApiError.bad(400, "missing_id");
+                    boolean removed = store.deleteStrategy(id);
+                    logs.warn("strategy", "delete " + id + " removed=" + removed);
+                    respondJson(ex, 200, new Json.Obj().put("ok", true).put("removed", removed));
+                }
+            });
+
+            add("/api/settings", ex -> {
+                if (method(ex, "GET")) {
+                    respondJson(ex, 200, new Json.Obj().put("ok", true).put("settings", store.settings().toJson()));
+                } else if (method(ex, "PUT")) {
+                    Json.Obj body = readJsonObj(ex);
+                    Settings s = Settings.fromJson(body.getObj("settings"), store.settings());
+                    store.setSettings(s);
+                    logs.info("settings", "paperFeeBps=" + s.paperFeeBps);
+                    respondJson(ex, 200, new Json.Obj().put("ok", true).put("settings", s.toJson()));
+                }
+            });
+
+            add("/api/backtest", ex -> {
+                if (!method(ex, "POST")) return;
+                Json.Obj body = readJsonObj(ex);
+                BacktestRequest req = BacktestRequest.fromJson(body);
+                BacktestResult res = engine.backtest(req);
+                respondJson(ex, 200, new Json.Obj().put("ok", true).put("result", res.toJson()));
+            });
+
+            add("/api/logs/tail", ex -> {
+                int n = qInt(ex.getRequestURI(), "n").orElse(250);
+                Json.Arr arr = new Json.Arr();
+                for (LogEvent ev : logs.tail(n)) arr.add(ev.toJson());
+                respondJson(ex, 200, new Json.Obj().put("ok", true).put("events", arr).put("count", arr.size()));
+            });
+
+            add("/api/logs/stream", ex -> {
+                if (!method(ex, "GET")) return;
+                Headers h = ex.getResponseHeaders();
+                h.set("Content-Type", "text/event-stream; charset=utf-8");
+                h.set("Cache-Control", "no-cache, no-store, must-revalidate");
