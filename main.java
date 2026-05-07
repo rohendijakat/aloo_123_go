@@ -430,3 +430,51 @@ public final class Aloo123Go {
             prevClose = c.close;
         }
 
+        boolean ready() {
+            return bars > Math.max(40, Math.max(rules.emaSlow, rules.rsiLen) + 8) && !Double.isNaN(rsi);
+        }
+
+        static double ema(double prev, double price, int len) {
+            double k = 2.0 / (len + 1.0);
+            return prev + k * (price - prev);
+        }
+    }
+
+    static final class Rsi {
+        final int len;
+        int n = 0;
+        double avgGain = 0;
+        double avgLoss = 0;
+        Rsi(int len) { this.len = Math.max(2, len); }
+        double update(double delta) {
+            double g = Math.max(0, delta);
+            double l = Math.max(0, -delta);
+            n++;
+            if (n <= len) {
+                avgGain += g;
+                avgLoss += l;
+                if (n == len) { avgGain /= len; avgLoss /= len; }
+            } else {
+                avgGain = ((avgGain * (len - 1)) + g) / len;
+                avgLoss = ((avgLoss * (len - 1)) + l) / len;
+            }
+            if (avgLoss == 0) return 100.0;
+            double rs = avgGain / avgLoss;
+            return 100.0 - (100.0 / (1.0 + rs));
+        }
+    }
+
+    // -------------------------- Backtest & paper broker --------------------------
+    static final class BacktestRequest {
+        final String strategyId;
+        final String symbol;
+        final String candlesCsv;
+        final int maxBytes;
+        final double startCash;
+        final double minTradeCash;
+
+        BacktestRequest(String strategyId, String symbol, String candlesCsv, int maxBytes, double startCash, double minTradeCash) {
+            this.strategyId = strategyId;
+            this.symbol = symbol;
+            this.candlesCsv = candlesCsv;
+            this.maxBytes = maxBytes;
