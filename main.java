@@ -238,3 +238,51 @@ public final class Aloo123Go {
             h.set("Access-Control-Allow-Origin", "*");
             h.set("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS");
             h.set("Access-Control-Allow-Headers", "Content-Type,Authorization");
+            h.set("Access-Control-Max-Age", "86400");
+        }
+    }
+
+    // -------------------------- Engine / Backtest --------------------------
+    static final class Engine {
+        private final Store store;
+        private final LogBus logs;
+        Engine(Store store, LogBus logs) { this.store = store; this.logs = logs; }
+
+        BacktestResult backtest(BacktestRequest req) {
+            StrategyDef strat = store.getStrategy(req.strategyId).orElseThrow(() -> ApiError.bad(404, "strategy_not_found"));
+            Csv.ParseResult pr = Csv.parse(req.candlesCsv, req.maxBytes);
+            if (!pr.ok) throw ApiError.bad(400, "bad_csv: " + pr.error);
+            List<Candle> candles = pr.candles;
+            if (candles.size() < 60) throw ApiError.bad(400, "need_more_candles");
+            logs.info("backtest", "run " + strat.name + " candles=" + candles.size());
+
+            Paper paper = new Paper(store.settings());
+            IndicatorSet ind = new IndicatorSet(strat.rules);
+            PaperState st = PaperState.initial(req.startCash, req.symbol);
+            List<Fill> fills = new ArrayList<>();
+            int cooldown = 0;
+
+            for (Candle c : candles) {
+                ind.update(c);
+                if (!ind.ready()) continue;
+
+                if (cooldown > 0) { cooldown--; continue; }
+                Decision d = strat.rules.decide(ind);
+                if (d.action == Action.BUY) {
+                    paper.buy(st, c, strat.rules).ifPresent(f -> { fills.add(f); cooldown = strat.rules.cooldownBars; });
+                } else if (d.action == Action.SELL) {
+                    paper.sell(st, c, strat.rules).ifPresent(f -> { fills.add(f); cooldown = strat.rules.cooldownBars; });
+                }
+            }
+
+            EquityCurve curve = EquityCurve.build(st, candles);
+            return BacktestResult.of(req, strat, st, fills, curve, pr.warnings);
+        }
+    }
+
+    enum Action { BUY, SELL, HOLD }
+    static final class Decision { final Action action; final String reason; Decision(Action a, String r) { action=a; reason=r; } }
+
+    // -------------------------- Strategy --------------------------
+    static final class StrategyDef {
+        final String id;
