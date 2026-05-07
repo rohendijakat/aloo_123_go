@@ -526,3 +526,51 @@ public final class Aloo123Go {
         }
 
         static BacktestResult of(BacktestRequest req, StrategyDef strat, PaperState st, List<Fill> fills, EquityCurve curve, List<String> warnings) {
+            double endEquity = curve.points.isEmpty() ? st.cash : curve.points.get(curve.points.size() - 1).equity;
+            double wins = 0;
+            for (int i = 1; i < fills.size(); i++) {
+                Fill a = fills.get(i - 1), b = fills.get(i);
+                if (a.side.equals("BUY") && b.side.equals("SELL")) {
+                    double pnl = (b.px - a.px) * b.qty;
+                    if (pnl > 0) wins++;
+                }
+            }
+            double denom = Math.max(1.0, Math.floor(fills.size() / 2.0));
+            double winRate = wins / denom;
+            double maxDd = computeMaxDrawdown(curve.points);
+            return new BacktestResult(req.strategyId, strat.name, req.symbol, req.startCash, st.cash, endEquity, st.trades, winRate, maxDd, fills, curve, warnings);
+        }
+
+        Json.Obj toJson() {
+            Json.Arr fa = new Json.Arr();
+            for (Fill f : fills) fa.add(f.toJson());
+            Json.Arr ca = new Json.Arr();
+            for (EquityPoint p : curve.points) ca.add(p.toJson());
+            Json.Arr wa = new Json.Arr();
+            for (String w : warnings) wa.add(w);
+            return new Json.Obj()
+                    .put("strategyId", strategyId)
+                    .put("strategyName", strategyName)
+                    .put("symbol", symbol)
+                    .put("startCash", startCash)
+                    .put("endCash", endCash)
+                    .put("endEquity", endEquity)
+                    .put("trades", trades)
+                    .put("winRate", winRate)
+                    .put("maxDrawdown", maxDrawdown)
+                    .put("fills", fa)
+                    .put("equityCurve", ca)
+                    .put("warnings", wa);
+        }
+    }
+
+    static final class PaperState {
+        final String symbol;
+        double cash;
+        double qty;
+        double avgEntry;
+        long trades;
+        PaperState(String symbol, double cash) { this.symbol = symbol; this.cash = cash; }
+        static PaperState initial(double cash, String symbol) { return new PaperState(symbol, cash); }
+    }
+
