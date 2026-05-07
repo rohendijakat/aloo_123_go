@@ -382,3 +382,51 @@ public final class Aloo123Go {
                     .put("slippageBps", slippageBps)
                     .put("cooldownBars", cooldownBars)
                     .put("takeProfitPct", takeProfitPct)
+                    .put("stopLossPct", stopLossPct);
+        }
+
+        static Rules fromJson(Json.Obj o, Rules fb) {
+            if (o == null) return fb;
+            return new Rules(
+                    o.getInt("emaFast", fb.emaFast),
+                    o.getInt("emaSlow", fb.emaSlow),
+                    o.getInt("rsiLen", fb.rsiLen),
+                    o.getDouble("rsiBuyBelow", fb.rsiBuyBelow),
+                    o.getDouble("rsiSellAbove", fb.rsiSellAbove),
+                    o.getDouble("riskPerTrade", fb.riskPerTrade),
+                    o.getInt("slippageBps", fb.slippageBps),
+                    o.getInt("cooldownBars", fb.cooldownBars),
+                    o.getDouble("takeProfitPct", fb.takeProfitPct),
+                    o.getDouble("stopLossPct", fb.stopLossPct)
+            );
+        }
+    }
+
+    // -------------------------- Indicators --------------------------
+    static final class IndicatorSet {
+        final Rules rules;
+        int bars;
+        double emaFast = Double.NaN;
+        double emaSlow = Double.NaN;
+        double rsi = Double.NaN;
+        double prevClose = Double.NaN;
+        final Rsi rsiCalc;
+
+        IndicatorSet(Rules rules) {
+            this.rules = rules;
+            this.rsiCalc = new Rsi(rules.rsiLen);
+        }
+
+        void update(Candle c) {
+            bars++;
+            if (Double.isNaN(emaFast)) {
+                emaFast = c.close;
+                emaSlow = c.close;
+            } else {
+                emaFast = ema(emaFast, c.close, rules.emaFast);
+                emaSlow = ema(emaSlow, c.close, rules.emaSlow);
+            }
+            if (!Double.isNaN(prevClose)) rsi = rsiCalc.update(c.close - prevClose);
+            prevClose = c.close;
+        }
+
