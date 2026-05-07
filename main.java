@@ -190,3 +190,51 @@ public final class Aloo123Go {
                 Headers h = ex.getResponseHeaders();
                 h.set("Content-Type", "text/event-stream; charset=utf-8");
                 h.set("Cache-Control", "no-cache, no-store, must-revalidate");
+                h.set("Connection", "keep-alive");
+                if (cli.cors) h.set("Access-Control-Allow-Origin", "*");
+                ex.sendResponseHeaders(200, 0);
+                OutputStream os = ex.getResponseBody();
+                LogBus.Sub sub = logs.subscribe();
+                try {
+                    sse(os, "hello", new Json.Obj().put("ok", true).put("ts", System.currentTimeMillis()).toJson());
+                    for (LogEvent ev : logs.tail(120)) sse(os, "log", ev.toJson().toJson());
+                    os.flush();
+                    while (!sub.closed.get()) {
+                        LogEvent ev = sub.poll(12_000);
+                        if (ev == null) {
+                            sse(os, "ping", new Json.Obj().put("ts", System.currentTimeMillis()).toJson());
+                            os.flush();
+                            continue;
+                        }
+                        sse(os, "log", ev.toJson().toJson());
+                        os.flush();
+                    }
+                } catch (IOException ignored) {
+                } finally {
+                    sub.close();
+                    try { os.close(); } catch (Exception ignored) {}
+                }
+            });
+        }
+
+        private void add(String path, Handler handler) {
+            server.createContext(path, ex -> {
+                try {
+                    if (cli.cors) corsHeaders(ex);
+                    if (method(ex, "OPTIONS")) { respondEmpty(ex, 204); return; }
+                    handler.handle(ex);
+                } catch (ApiError ae) {
+                    logs.warn("api", ae.code + " " + ae.message);
+                    respondJson(ex, ae.code, new Json.Obj().put("ok", false).put("error", ae.message).put("code", ae.code));
+                } catch (Throwable t) {
+                    logs.error("api", "crash: " + t.getClass().getSimpleName() + ": " + t.getMessage());
+                    respondJson(ex, 500, new Json.Obj().put("ok", false).put("error", "internal_error"));
+                }
+            });
+        }
+
+        private static void corsHeaders(HttpExchange ex) {
+            Headers h = ex.getResponseHeaders();
+            h.set("Access-Control-Allow-Origin", "*");
+            h.set("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS");
+            h.set("Access-Control-Allow-Headers", "Content-Type,Authorization");
