@@ -1150,3 +1150,39 @@ public final class Aloo123Go {
     // -------------------------- small utilities --------------------------
     static String iso(long ms) { return DateTimeFormatter.ISO_INSTANT.format(Instant.ofEpochMilli(ms)); }
     static double clamp(double v, double lo, double hi) { return Math.max(lo, Math.min(hi, v)); }
+    static int clampInt(int v, int lo, int hi) { return Math.max(lo, Math.min(hi, v)); }
+    static String urlDecode(String s) { return java.net.URLDecoder.decode(s, StandardCharsets.UTF_8); }
+    static String randomToken() {
+        byte[] b = new byte[24];
+        new Random().nextBytes(b);
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(b);
+    }
+    static String esc(String s) {
+        if (s == null) return "";
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            if (c == '\\') sb.append("\\\\");
+            else if (c == '"') sb.append("\\\"");
+            else if (c == '\n') sb.append("\\n");
+            else if (c == '\r') sb.append("\\r");
+            else if (c == '\t') sb.append("\\t");
+            else if (c < 0x20) sb.append(String.format("\\u%04x", (int) c));
+            else sb.append(c);
+        }
+        return sb.toString();
+    }
+
+    static double computeMaxDrawdown(List<EquityPoint> pts) {
+        if (pts.isEmpty()) return 0;
+        double peak = pts.get(0).equity;
+        double maxDd = 0;
+        for (EquityPoint p : pts) {
+            peak = Math.max(peak, p.equity);
+            if (peak <= 0) continue;
+            double dd = (peak - p.equity) / peak;
+            maxDd = Math.max(maxDd, dd);
+        }
+        return maxDd;
+    }
+}
