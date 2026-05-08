@@ -910,3 +910,51 @@ public final class Aloo123Go {
                 StringBuilder sb = new StringBuilder("[");
                 for (int i = 0; i < values.size(); i++) { if (i != 0) sb.append(","); sb.append(values.get(i).toJson()); }
                 return sb.append("]").toString();
+            }
+        }
+        static final class Obj implements Val {
+            final Map<String, Val> map = new LinkedHashMap<>();
+            Obj put(String k, Object v) { map.put(k, wrap(v)); return this; }
+            Obj put(String k, Val v) { map.put(k, v == null ? new Null() : v); return this; }
+            String getString(String k, String fb) { Val v = map.get(k); return v instanceof Str ? ((Str) v).v : fb; }
+            int getInt(String k, int fb) { Val v = map.get(k); return v instanceof Num ? (int) ((Num) v).v : fb; }
+            long getLong(String k, long fb) { Val v = map.get(k); return v instanceof Num ? (long) ((Num) v).v : fb; }
+            double getDouble(String k, double fb) { Val v = map.get(k); return v instanceof Num ? ((Num) v).v : fb; }
+            Obj getObj(String k) { Val v = map.get(k); return v instanceof Obj ? (Obj) v : null; }
+            Arr getArr(String k) { Val v = map.get(k); return v instanceof Arr ? (Arr) v : new Arr(); }
+            @Override public String toJson() {
+                StringBuilder sb = new StringBuilder("{");
+                int i = 0;
+                for (Map.Entry<String, Val> e : map.entrySet()) {
+                    if (i++ != 0) sb.append(",");
+                    sb.append("\"").append(esc(e.getKey())).append("\":").append(e.getValue().toJson());
+                }
+                return sb.append("}").toString();
+            }
+        }
+
+        static Val wrap(Object v) {
+            if (v == null) return new Null();
+            if (v instanceof Val) return (Val) v;
+            if (v instanceof String) return new Str((String) v);
+            if (v instanceof Boolean) return new Bool((Boolean) v);
+            if (v instanceof Integer) return new Num(((Integer) v).doubleValue());
+            if (v instanceof Long) return new Num(((Long) v).doubleValue());
+            if (v instanceof Double) return new Num((Double) v);
+            if (v instanceof Float) return new Num(((Float) v).doubleValue());
+            return new Str(String.valueOf(v));
+        }
+
+        static Val parse(String s) { return new Parser(s).parse(); }
+
+        static final class Parser {
+            final String s;
+            int i = 0;
+            Parser(String s) { this.s = s == null ? "" : s.trim(); }
+
+            Val parse() { skip(); Val v = readVal(); skip(); return v; }
+
+            Val readVal() {
+                skip();
+                if (i >= s.length()) return new Null();
+                char c = s.charAt(i);
