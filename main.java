@@ -1054,3 +1054,51 @@ public final class Aloo123Go {
                 if (c == '{' || c == '[') {
                     out.append(c).append('\n');
                     depth++;
+                    pad(out, depth, indent);
+                } else if (c == '}' || c == ']') {
+                    out.append('\n');
+                    depth = Math.max(0, depth - 1);
+                    pad(out, depth, indent);
+                    out.append(c);
+                } else if (c == ',') {
+                    out.append(c).append('\n');
+                    pad(out, depth, indent);
+                } else if (c == ':') {
+                    out.append(": ");
+                } else if (!Character.isWhitespace(c)) {
+                    out.append(c);
+                }
+            }
+            return out.toString();
+        }
+        static void pad(StringBuilder sb, int depth, int indent) {
+            for (int i = 0; i < depth * indent; i++) sb.append(' ');
+        }
+    }
+
+    // -------------------------- API helpers --------------------------
+    static final class ApiError extends RuntimeException {
+        final int code;
+        final String message;
+        ApiError(int code, String message) { super(message); this.code=code; this.message=message; }
+        static ApiError bad(int code, String message) { return new ApiError(code, message); }
+    }
+
+    static boolean method(HttpExchange ex, String m) { return ex.getRequestMethod().equalsIgnoreCase(m); }
+
+    static void respondEmpty(HttpExchange ex, int code) throws IOException {
+        ex.sendResponseHeaders(code, -1);
+        ex.close();
+    }
+
+    static void respondJson(HttpExchange ex, int code, Json.Val v) throws IOException {
+        byte[] bytes = v.toJson().getBytes(StandardCharsets.UTF_8);
+        Headers h = ex.getResponseHeaders();
+        h.set("Content-Type", "application/json; charset=utf-8");
+        h.set("Cache-Control", "no-store");
+        ex.sendResponseHeaders(code, bytes.length);
+        try (OutputStream os = ex.getResponseBody()) { os.write(bytes); }
+    }
+
+    static Json.Obj readJsonObj(HttpExchange ex) throws IOException {
+        String body = readBody(ex, 10_000_000);
