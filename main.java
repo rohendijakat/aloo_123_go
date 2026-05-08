@@ -718,3 +718,51 @@ public final class Aloo123Go {
             if (o == null) return fb;
             int fee = clampInt(o.getInt("paperFeeBps", fb.paperFeeBps), 0, 250);
             String tok = o.getString("apiToken", fb.apiToken);
+            if (tok == null || tok.isBlank()) tok = randomToken();
+            String note = o.getString("note", fb.note);
+            return new Settings(fee, tok, note);
+        }
+    }
+
+    static final class Store {
+        private final Path dir;
+        private final Path file;
+        private final LogBus logs;
+        private boolean dirty;
+        private Settings settings;
+        private final Map<String, StrategyDef> strategies = new LinkedHashMap<>();
+
+        Store(Path dir, LogBus logs) {
+            this.dir = dir;
+            this.file = dir.resolve("state.json");
+            this.logs = logs;
+            try { Files.createDirectories(dir); } catch (IOException ignored) {}
+            load();
+        }
+
+        synchronized Settings settings() { return settings; }
+        synchronized void setSettings(Settings s) { settings = s; dirty = true; }
+        synchronized List<StrategyDef> listStrategies() { return new ArrayList<>(strategies.values()); }
+        synchronized Optional<StrategyDef> getStrategy(String id) { return Optional.ofNullable(strategies.get(id)); }
+        synchronized void upsertStrategy(StrategyDef s) { strategies.put(s.id, s); dirty = true; }
+        synchronized boolean deleteStrategy(String id) { StrategyDef r = strategies.remove(id); if (r != null) dirty = true; return r != null; }
+
+        synchronized void flushIfDirty() { if (dirty) flush(); }
+
+        private void load() {
+            if (!Files.exists(file)) {
+                settings = Settings.defaults();
+                StrategyDef d = StrategyDef.defaults();
+                strategies.put(d.id, d);
+                dirty = true;
+                flush();
+                return;
+            }
+            try {
+                String txt = Files.readString(file, StandardCharsets.UTF_8);
+                Json.Obj root = (Json.Obj) Json.parse(txt);
+                settings = Settings.fromJson(root.getObj("settings"), Settings.defaults());
+                strategies.clear();
+                Json.Arr arr = root.getArr("strategies");
+                for (Json.Val v : arr.values) {
+                    if (v instanceof Json.Obj) {
