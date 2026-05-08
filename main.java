@@ -574,3 +574,51 @@ public final class Aloo123Go {
         static PaperState initial(double cash, String symbol) { return new PaperState(symbol, cash); }
     }
 
+    static final class Fill {
+        final long ts;
+        final String side;
+        final double px;
+        final double qty;
+        final double fees;
+        final double cashAfter;
+        Fill(long ts, String side, double px, double qty, double fees, double cashAfter) {
+            this.ts = ts; this.side = side; this.px = px; this.qty = qty; this.fees = fees; this.cashAfter = cashAfter;
+        }
+        Json.Obj toJson() {
+            return new Json.Obj().put("ts", ts).put("iso", iso(ts)).put("side", side).put("px", px).put("qty", qty).put("fees", fees).put("cashAfter", cashAfter);
+        }
+    }
+
+    static final class Paper {
+        final Settings settings;
+        Paper(Settings settings) { this.settings = settings; }
+
+        Optional<Fill> buy(PaperState st, Candle c, Rules r) {
+            if (st.qty > 0) return Optional.empty();
+            double riskCash = st.cash * clamp(r.riskPerTrade, 0.01, 0.95);
+            if (riskCash < 5) return Optional.empty();
+            double px = c.close;
+            double qty = riskCash / px;
+            double fee = riskCash * (settings.paperFeeBps / 10_000.0);
+            double slip = riskCash * (clamp(r.slippageBps, 0, 1000) / 10_000.0);
+            double cost = riskCash + fee + slip;
+            if (cost > st.cash) return Optional.empty();
+            st.cash -= cost;
+            st.qty = qty;
+            st.avgEntry = px;
+            st.trades++;
+            return Optional.of(new Fill(c.ts, "BUY", px, qty, fee + slip, st.cash));
+        }
+
+        Optional<Fill> sell(PaperState st, Candle c, Rules r) {
+            if (st.qty <= 0) return Optional.empty();
+            double px = c.close;
+            double gross = st.qty * px;
+            double fee = gross * (settings.paperFeeBps / 10_000.0);
+            double slip = gross * (clamp(r.slippageBps, 0, 1000) / 10_000.0);
+            double net = gross - fee - slip;
+            st.cash += net;
+            double qty = st.qty;
+            st.qty = 0;
+            st.avgEntry = 0;
+            st.trades++;
