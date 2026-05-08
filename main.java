@@ -622,3 +622,51 @@ public final class Aloo123Go {
             st.qty = 0;
             st.avgEntry = 0;
             st.trades++;
+            return Optional.of(new Fill(c.ts, "SELL", px, qty, fee + slip, st.cash));
+        }
+    }
+
+    static final class EquityPoint {
+        final long ts;
+        final double px;
+        final double equity;
+        EquityPoint(long ts, double px, double equity) { this.ts = ts; this.px = px; this.equity = equity; }
+        Json.Obj toJson() { return new Json.Obj().put("ts", ts).put("px", px).put("equity", equity); }
+    }
+
+    static final class EquityCurve {
+        final List<EquityPoint> points;
+        EquityCurve(List<EquityPoint> points) { this.points = points; }
+        static EquityCurve build(PaperState st, List<Candle> candles) {
+            List<EquityPoint> pts = new ArrayList<>(candles.size());
+            for (Candle c : candles) {
+                double pos = st.qty * c.close;
+                pts.add(new EquityPoint(c.ts, c.close, st.cash + pos));
+            }
+            return new EquityCurve(pts);
+        }
+    }
+
+    // -------------------------- CSV --------------------------
+    static final class Candle {
+        final long ts;
+        final double open, high, low, close, vol;
+        Candle(long ts, double open, double high, double low, double close, double vol) {
+            this.ts = ts; this.open=open; this.high=high; this.low=low; this.close=close; this.vol=vol;
+        }
+    }
+
+    static final class Csv {
+        static final class ParseResult {
+            final boolean ok;
+            final List<Candle> candles;
+            final List<String> warnings;
+            final String error;
+            ParseResult(boolean ok, List<Candle> candles, List<String> warnings, String error) { this.ok=ok; this.candles=candles; this.warnings=warnings; this.error=error; }
+        }
+
+        static ParseResult parse(String csv, int maxBytes) {
+            if (csv == null) return new ParseResult(false, List.of(), List.of(), "null_csv");
+            if (csv.getBytes(StandardCharsets.UTF_8).length > maxBytes) return new ParseResult(false, List.of(), List.of(), "csv_too_large");
+            String norm = csv.replace("\r\n", "\n").replace("\r", "\n");
+            String[] lines = norm.split("\n");
