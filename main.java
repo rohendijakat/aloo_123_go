@@ -958,3 +958,51 @@ public final class Aloo123Go {
                 skip();
                 if (i >= s.length()) return new Null();
                 char c = s.charAt(i);
+                if (c == '{') return readObj();
+                if (c == '[') return readArr();
+                if (c == '"') return new Str(readString());
+                if (eat("true")) return new Bool(true);
+                if (eat("false")) return new Bool(false);
+                if (eat("null")) return new Null();
+                return readNum();
+            }
+
+            Obj readObj() {
+                expect('{');
+                Obj o = new Obj();
+                skip();
+                if (peek('}')) { i++; return o; }
+                while (true) {
+                    skip();
+                    String k = readString();
+                    skip();
+                    expect(':');
+                    Val v = readVal();
+                    o.put(k, v);
+                    skip();
+                    if (peek('}')) { i++; break; }
+                    expect(',');
+                }
+                return o;
+            }
+
+            Arr readArr() {
+                expect('[');
+                Arr a = new Arr();
+                skip();
+                if (peek(']')) { i++; return a; }
+                while (true) {
+                    a.values.add(readVal());
+                    skip();
+                    if (peek(']')) { i++; break; }
+                    expect(',');
+                }
+                return a;
+            }
+
+            Num readNum() {
+                int start = i;
+                while (i < s.length()) {
+                    char c = s.charAt(i);
+                    if ((c >= '0' && c <= '9') || c == '-' || c == '.' || c == 'e' || c == 'E' || c == '+') i++;
+                    else break;
