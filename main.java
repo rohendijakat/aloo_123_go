@@ -1102,3 +1102,51 @@ public final class Aloo123Go {
 
     static Json.Obj readJsonObj(HttpExchange ex) throws IOException {
         String body = readBody(ex, 10_000_000);
+        Json.Val v = Json.parse(body);
+        if (!(v instanceof Json.Obj)) throw ApiError.bad(400, "expected_json_object");
+        return (Json.Obj) v;
+    }
+
+    static String readBody(HttpExchange ex, int maxBytes) throws IOException {
+        try (InputStream is = ex.getRequestBody()) {
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            byte[] buf = new byte[16_384];
+            int read;
+            int total = 0;
+            while ((read = is.read(buf)) != -1) {
+                total += read;
+                if (total > maxBytes) throw ApiError.bad(413, "payload_too_large");
+                baos.write(buf, 0, read);
+            }
+            return baos.toString(StandardCharsets.UTF_8);
+        }
+    }
+
+    static void sse(OutputStream os, String event, String data) throws IOException {
+        String payload = "event: " + event + "\n" + "data: " + data.replace("\n", "\\n") + "\n\n";
+        os.write(payload.getBytes(StandardCharsets.UTF_8));
+    }
+
+    static Optional<String> q(URI uri, String key) {
+        String q = uri.getRawQuery();
+        if (q == null || q.isBlank()) return Optional.empty();
+        String[] parts = q.split("&");
+        for (String p : parts) {
+            int idx = p.indexOf('=');
+            String k = idx >= 0 ? p.substring(0, idx) : p;
+            String v = idx >= 0 ? p.substring(idx + 1) : "";
+            if (k.equals(key)) return Optional.of(urlDecode(v));
+        }
+        return Optional.empty();
+    }
+
+    static Optional<Integer> qInt(URI uri, String key) {
+        return q(uri, key).flatMap(s -> {
+            try { return Optional.of(Integer.parseInt(s)); }
+            catch (Exception e) { return Optional.empty(); }
+        });
+    }
+
+    // -------------------------- small utilities --------------------------
+    static String iso(long ms) { return DateTimeFormatter.ISO_INSTANT.format(Instant.ofEpochMilli(ms)); }
+    static double clamp(double v, double lo, double hi) { return Math.max(lo, Math.min(hi, v)); }
