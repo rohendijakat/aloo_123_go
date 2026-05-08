@@ -862,3 +862,51 @@ public final class Aloo123Go {
                     q.addLast(ev);
                     while (q.size() > 600) q.removeFirst();
                     q.notifyAll();
+                }
+            }
+
+            LogEvent poll(long timeoutMs) {
+                long end = System.currentTimeMillis() + timeoutMs;
+                synchronized (q) {
+                    while (!closed.get() && q.isEmpty()) {
+                        long left = end - System.currentTimeMillis();
+                        if (left <= 0) return null;
+                        try { q.wait(left); } catch (InterruptedException ie) { return null; }
+                    }
+                    return q.pollFirst();
+                }
+            }
+
+            @Override public void close() {
+                closed.set(true);
+                bus.unsubscribe(this);
+                synchronized (q) { q.notifyAll(); }
+            }
+        }
+    }
+
+    // -------------------------- Minimal JSON --------------------------
+    static final class Json {
+        interface Val { String toJson(); default String toPrettyString(int indent) { return Pretty.format(toJson(), indent); } }
+
+        static final class Null implements Val { @Override public String toJson() { return "null"; } }
+        static final class Bool implements Val { final boolean v; Bool(boolean v){this.v=v;} @Override public String toJson(){return v?"true":"false";} }
+        static final class Num implements Val {
+            final double v;
+            Num(double v){this.v=v;}
+            @Override public String toJson() {
+                if (Double.isNaN(v) || Double.isInfinite(v)) return "null";
+                long lv = (long) v;
+                if (Math.abs(v - lv) < 1e-12) return Long.toString(lv);
+                return Double.toString(v);
+            }
+        }
+        static final class Str implements Val { final String v; Str(String v){this.v=v;} @Override public String toJson(){return "\"" + esc(v) + "\"";} }
+        static final class Arr implements Val {
+            final List<Val> values = new ArrayList<>();
+            Arr add(Object v) { values.add(wrap(v)); return this; }
+            int size() { return values.size(); }
+            @Override public String toJson() {
+                StringBuilder sb = new StringBuilder("[");
+                for (int i = 0; i < values.size(); i++) { if (i != 0) sb.append(","); sb.append(values.get(i).toJson()); }
+                return sb.append("]").toString();
