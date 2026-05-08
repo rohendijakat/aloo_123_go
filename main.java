@@ -814,3 +814,51 @@ public final class Aloo123Go {
         Json.Obj toJson() { return new Json.Obj().put("seq", seq).put("ts", ts).put("iso", iso(ts)).put("level", level).put("topic", topic).put("msg", msg); }
     }
 
+    static final class LogBus {
+        private final int capacity;
+        private final Deque<LogEvent> ring = new ArrayDeque<>();
+        private final AtomicLong seq = new AtomicLong(0);
+        private final CopyOnWriteArrayList<Sub> subs = new CopyOnWriteArrayList<>();
+
+        LogBus(int capacity) { this.capacity = Math.max(200, capacity); }
+        void info(String topic, String msg) { pub("INFO", topic, msg); }
+        void warn(String topic, String msg) { pub("WARN", topic, msg); }
+        void error(String topic, String msg) { pub("ERROR", topic, msg); }
+
+        void pub(String level, String topic, String msg) {
+            LogEvent ev = new LogEvent(seq.incrementAndGet(), System.currentTimeMillis(), level, topic, msg);
+            synchronized (ring) {
+                ring.addLast(ev);
+                while (ring.size() > capacity) ring.removeFirst();
+            }
+            for (Sub s : subs) s.offer(ev);
+        }
+
+        List<LogEvent> tail(int n) {
+            n = clampInt(n, 1, capacity);
+            List<LogEvent> out = new ArrayList<>(n);
+            synchronized (ring) {
+                int skip = Math.max(0, ring.size() - n);
+                int i = 0;
+                for (LogEvent ev : ring) {
+                    if (i++ < skip) continue;
+                    out.add(ev);
+                }
+            }
+            return out;
+        }
+
+        Sub subscribe() { Sub s = new Sub(this); subs.add(s); return s; }
+        void unsubscribe(Sub s) { subs.remove(s); }
+
+        static final class Sub implements Closeable {
+            private final LogBus bus;
+            private final Deque<LogEvent> q = new ArrayDeque<>();
+            final AtomicBoolean closed = new AtomicBoolean(false);
+            Sub(LogBus bus) { this.bus = bus; }
+
+            void offer(LogEvent ev) {
+                synchronized (q) {
+                    q.addLast(ev);
+                    while (q.size() > 600) q.removeFirst();
+                    q.notifyAll();
