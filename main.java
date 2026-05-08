@@ -670,3 +670,51 @@ public final class Aloo123Go {
             if (csv.getBytes(StandardCharsets.UTF_8).length > maxBytes) return new ParseResult(false, List.of(), List.of(), "csv_too_large");
             String norm = csv.replace("\r\n", "\n").replace("\r", "\n");
             String[] lines = norm.split("\n");
+            int start = 0;
+            if (lines.length > 0 && lines[0].toLowerCase(Locale.ROOT).contains("open")) start = 1;
+            List<Candle> out = new ArrayList<>();
+            List<String> warnings = new ArrayList<>();
+            long prev = -1;
+            for (int i = start; i < lines.length; i++) {
+                String line = lines[i].trim();
+                if (line.isEmpty()) continue;
+                String[] c = line.split(",");
+                if (c.length < 5) return new ParseResult(false, List.of(), warnings, "bad_cols_line_" + (i + 1));
+                try {
+                    long ts = parseTs(c[0].trim());
+                    double o = Double.parseDouble(c[1].trim());
+                    double h = Double.parseDouble(c[2].trim());
+                    double l = Double.parseDouble(c[3].trim());
+                    double cl = Double.parseDouble(c[4].trim());
+                    double v = c.length >= 6 ? Double.parseDouble(c[5].trim()) : 0.0;
+                    if (prev != -1 && ts <= prev) warnings.add("non_increasing_ts_line_" + (i + 1));
+                    prev = ts;
+                    if (h < l) warnings.add("high_lt_low_line_" + (i + 1));
+                    out.add(new Candle(ts, o, h, l, cl, v));
+                } catch (Exception e) {
+                    return new ParseResult(false, List.of(), warnings, "parse_error_line_" + (i + 1));
+                }
+            }
+            if (out.size() > 200_000) warnings.add("large_dataset_" + out.size());
+            return new ParseResult(true, out, warnings, null);
+        }
+
+        static long parseTs(String s) {
+            if (s.matches("\\d{13}")) return Long.parseLong(s);
+            if (s.matches("\\d{10}")) return Long.parseLong(s) * 1000L;
+            return Instant.parse(s).toEpochMilli();
+        }
+    }
+
+    // -------------------------- Settings / Store --------------------------
+    static final class Settings {
+        final int paperFeeBps;
+        final String apiToken;
+        final String note;
+        Settings(int paperFeeBps, String apiToken, String note) { this.paperFeeBps=paperFeeBps; this.apiToken=apiToken; this.note=note; }
+        static Settings defaults() { return new Settings(8, randomToken(), "local paper engine"); }
+        Json.Obj toJson() { return new Json.Obj().put("paperFeeBps", paperFeeBps).put("apiToken", apiToken).put("note", note); }
+        static Settings fromJson(Json.Obj o, Settings fb) {
+            if (o == null) return fb;
+            int fee = clampInt(o.getInt("paperFeeBps", fb.paperFeeBps), 0, 250);
+            String tok = o.getString("apiToken", fb.apiToken);
