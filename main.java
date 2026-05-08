@@ -766,3 +766,51 @@ public final class Aloo123Go {
                 Json.Arr arr = root.getArr("strategies");
                 for (Json.Val v : arr.values) {
                     if (v instanceof Json.Obj) {
+                        StrategyDef s = StrategyDef.fromJson((Json.Obj) v, null);
+                        strategies.put(s.id, s);
+                    }
+                }
+                dirty = false;
+                logs.info("store", "loaded " + strategies.size() + " strategies");
+            } catch (Exception e) {
+                logs.error("store", "load failed, reset: " + e.getMessage());
+                settings = Settings.defaults();
+                strategies.clear();
+                StrategyDef d = StrategyDef.defaults();
+                strategies.put(d.id, d);
+                dirty = true;
+                flush();
+            }
+        }
+
+        private void flush() {
+            try {
+                Json.Obj root = new Json.Obj()
+                        .put("settings", settings.toJson())
+                        .put("strategies", strategiesJson())
+                        .put("savedAt", System.currentTimeMillis());
+                Files.writeString(file, root.toPrettyString(2), StandardCharsets.UTF_8);
+                dirty = false;
+            } catch (Exception e) {
+                logs.error("store", "flush failed: " + e.getMessage());
+            }
+        }
+
+        private Json.Arr strategiesJson() {
+            Json.Arr arr = new Json.Arr();
+            for (StrategyDef s : strategies.values()) arr.add(s.toJson());
+            return arr;
+        }
+    }
+
+    // -------------------------- Logs --------------------------
+    static final class LogEvent {
+        final long seq;
+        final long ts;
+        final String level;
+        final String topic;
+        final String msg;
+        LogEvent(long seq, long ts, String level, String topic, String msg) { this.seq=seq; this.ts=ts; this.level=level; this.topic=topic; this.msg=msg; }
+        Json.Obj toJson() { return new Json.Obj().put("seq", seq).put("ts", ts).put("iso", iso(ts)).put("level", level).put("topic", topic).put("msg", msg); }
+    }
+
