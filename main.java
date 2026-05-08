@@ -1006,3 +1006,51 @@ public final class Aloo123Go {
                     char c = s.charAt(i);
                     if ((c >= '0' && c <= '9') || c == '-' || c == '.' || c == 'e' || c == 'E' || c == '+') i++;
                     else break;
+                }
+                String t = s.substring(start, i).trim();
+                try { return new Num(Double.parseDouble(t)); }
+                catch (Exception e) { return new Num(0); }
+            }
+
+            String readString() {
+                expect('"');
+                StringBuilder sb = new StringBuilder();
+                while (i < s.length()) {
+                    char c = s.charAt(i++);
+                    if (c == '"') break;
+                    if (c == '\\' && i < s.length()) {
+                        char n = s.charAt(i++);
+                        if (n == '"' || n == '\\' || n == '/') sb.append(n);
+                        else if (n == 'b') sb.append('\b');
+                        else if (n == 'f') sb.append('\f');
+                        else if (n == 'n') sb.append('\n');
+                        else if (n == 'r') sb.append('\r');
+                        else if (n == 't') sb.append('\t');
+                        else sb.append(n);
+                    } else sb.append(c);
+                }
+                return sb.toString();
+            }
+
+            void skip() { while (i < s.length() && Character.isWhitespace(s.charAt(i))) i++; }
+            boolean peek(char c) { return i < s.length() && s.charAt(i) == c; }
+            void expect(char c) { if (i >= s.length() || s.charAt(i) != c) throw new RuntimeException("json"); i++; }
+            boolean eat(String w) {
+                if (s.regionMatches(i, w, 0, w.length())) { i += w.length(); return true; }
+                return false;
+            }
+        }
+    }
+
+    static final class Pretty {
+        static String format(String json, int indent) {
+            StringBuilder out = new StringBuilder();
+            int depth = 0;
+            boolean inStr = false;
+            for (int i = 0; i < json.length(); i++) {
+                char c = json.charAt(i);
+                if (c == '"' && (i == 0 || json.charAt(i - 1) != '\\')) inStr = !inStr;
+                if (inStr) { out.append(c); continue; }
+                if (c == '{' || c == '[') {
+                    out.append(c).append('\n');
+                    depth++;
